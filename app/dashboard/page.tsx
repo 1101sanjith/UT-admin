@@ -3,65 +3,71 @@
 import { StatCard } from "@/components/ui/StatCard";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Loading } from "@/components/ui/Loading";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function DashboardPage() {
   const [dateRange, setDateRange] = useState("today");
   const [stats, setStats] = useState({
-    totalOrders: { value: 0, trend: { value: "+0%", isPositive: true } },
-    revenue: { value: "₹0", trend: { value: "+0%", isPositive: true } },
-    activeUsers: { value: 0, trend: { value: "+0%", isPositive: true } },
-    completedOrders: { value: 0, trend: { value: "+0%", isPositive: true } },
-    avgOrderValue: { value: "₹0", trend: { value: "+0%", isPositive: true } },
-    cancellationRate: {
-      value: "0%",
-      trend: { value: "+0%", isPositive: true },
-    },
+    totalOrders: 0,
+    revenue: 0,
+    activeUsers: 0,
+    completedOrders: 0,
+    avgOrderValue: 0,
+    cancellationRate: "0.0",
   });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
-  const [serviceAnalytics, setServiceAnalytics] = useState<any[]>([]);
+  const [orderStatusDistribution, setOrderStatusDistribution] = useState<any[]>(
+    []
+  );
+  const [revenueOverview, setRevenueOverview] = useState<any[]>([]);
+  const [topServices, setTopServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchDashboardData();
+
+    // Auto-refresh every 30 seconds
+    const refreshInterval = setInterval(() => {
+      fetchDashboardData();
+    }, 30000);
+
+    // Cleanup interval on component unmount
+    return () => clearInterval(refreshInterval);
   }, [dateRange]);
 
   const fetchDashboardData = async () => {
     try {
-      setLoading(true);
+      // Don't show loading spinner on auto-refresh, only on initial load
+      if (stats.totalOrders === 0) {
+        setLoading(true);
+      }
 
-      // Fetch all orders
-      const { data: ordersData, error: ordersError } = await supabase
-        .from("orders")
-        .select("*")
-        .order("created_at", { ascending: false });
+      // Fetch dashboard stats from API
+      const statsResponse = await fetch("/api/dashboard/stats");
+      const statsData = await statsResponse.json();
 
-      if (ordersError) throw ordersError;
+      if (statsResponse.ok && statsData.success) {
+        setStats(statsData.stats);
+        setOrderStatusDistribution(statsData.orderStatusDistribution);
+        setTopServices(statsData.topServices);
 
-      // Calculate stats
-      const totalOrders = ordersData?.length || 0;
-      const completedOrders =
-        ordersData?.filter((o: any) => o.status === "completed").length || 0;
-      const cancelledOrders =
-        ordersData?.filter((o: any) => o.status === "cancelled").length || 0;
-      const totalRevenue =
-        ordersData
-          ?.filter((o: any) => o.payment_status === "paid")
-          ?.reduce(
-            (sum: number, o: any) => sum + parseFloat(o.total_amount || 0),
-            0
-          ) || 0;
-      const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-      const cancellationRate =
-        totalOrders > 0 ? (cancelledOrders / totalOrders) * 100 : 0;
+        // Calculate height percentages for revenue chart
+        const maxRevenue = Math.max(
+          ...statsData.revenueOverview.map((d: any) => d.amount),
+          1
+        );
+        const revenueWithHeights = statsData.revenueOverview.map(
+          (item: any) => ({
+            ...item,
+            height: (item.amount / maxRevenue) * 100,
+          })
+        );
+        setRevenueOverview(revenueWithHeights);
+      }
 
-      // Fetch users count
-      const { count: usersCount } = await supabase
-        .from("users")
-        .select("*", { count: "exact", head: true });
-
-      // Fetch recent orders with user data
+      // Fetch recent orders
       const { data: recentOrdersData } = await supabase
         .from("orders_full_view")
         .select("*")
@@ -71,58 +77,16 @@ export default function DashboardPage() {
       const transformedRecentOrders = (recentOrdersData || []).map(
         (order: any) => ({
           id: order.order_number,
-          customer: order.user_name,
+          customer: order.user_name || "Unknown",
           service:
             order.item_count > 1 ? `${order.item_count} Services` : "Service",
-          amount: parseFloat(order.total_amount),
+          amount: parseFloat(order.total_amount || 0),
           status: capitalizeStatus(order.status),
           time: getTimeAgo(order.created_at),
         })
       );
 
-      // Fetch service analytics (using dummy data since services table doesn't exist)
-      const dummyServiceAnalytics = [
-        { name: "AC Repair", bookings: 245, revenue: 612500, growth: 12.5 },
-        { name: "House Cleaning", bookings: 189, revenue: 567000, growth: 8.3 },
-        { name: "Plumbing", bookings: 167, revenue: 250500, growth: 15.2 },
-        {
-          name: "Electrical Work",
-          bookings: 143,
-          revenue: 257400,
-          growth: -3.1,
-        },
-        { name: "Painting", bookings: 98, revenue: 490000, growth: 22.4 },
-      ];
-
-      setStats({
-        totalOrders: {
-          value: totalOrders,
-          trend: { value: "+12.5%", isPositive: true },
-        },
-        revenue: {
-          value: `₹${Math.round(totalRevenue).toLocaleString("en-IN")}`,
-          trend: { value: "+8.3%", isPositive: true },
-        },
-        activeUsers: {
-          value: usersCount || 0,
-          trend: { value: "+5.2%", isPositive: true },
-        },
-        completedOrders: {
-          value: completedOrders,
-          trend: { value: "+15.1%", isPositive: true },
-        },
-        avgOrderValue: {
-          value: `₹${Math.round(avgOrderValue).toLocaleString("en-IN")}`,
-          trend: { value: "-2.1%", isPositive: false },
-        },
-        cancellationRate: {
-          value: `${cancellationRate.toFixed(1)}%`,
-          trend: { value: "-1.2%", isPositive: true },
-        },
-      });
-
       setRecentOrders(transformedRecentOrders);
-      setServiceAnalytics(dummyServiceAnalytics);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
@@ -153,50 +117,6 @@ export default function DashboardPage() {
     return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
   };
 
-  // Dummy mock data for fallback
-  const mockRecentOrders = [
-    {
-      id: "ORD-1234",
-      customer: "Rahul Sharma",
-      service: "AC Repair",
-      amount: 2500,
-      status: "Pending",
-      time: "10 mins ago",
-    },
-    {
-      id: "ORD-1233",
-      customer: "Priya Gupta",
-      service: "Plumbing",
-      amount: 1500,
-      status: "In Progress",
-      time: "25 mins ago",
-    },
-    {
-      id: "ORD-1232",
-      customer: "Amit Patel",
-      service: "House Cleaning",
-      amount: 3000,
-      status: "Completed",
-      time: "1 hour ago",
-    },
-    {
-      id: "ORD-1231",
-      customer: "Sneha Kumar",
-      service: "Electrical Work",
-      amount: 1800,
-      status: "Confirmed",
-      time: "2 hours ago",
-    },
-    {
-      id: "ORD-1230",
-      customer: "Vikram Singh",
-      service: "Painting",
-      amount: 5000,
-      status: "Completed",
-      time: "3 hours ago",
-    },
-  ];
-
   const getStatusBadge = (status: string) => {
     const statusMap: Record<
       string,
@@ -211,32 +131,46 @@ export default function DashboardPage() {
     return <Badge variant={statusMap[status] || "default"}>{status}</Badge>;
   };
 
+  const getStatusColor = (color: string) => {
+    const colorMap: Record<string, string> = {
+      green: "bg-green-500",
+      blue: "bg-accent",
+      yellow: "bg-brand-500",
+      red: "bg-red-500",
+    };
+    return colorMap[color] || "bg-gray-500";
+  };
+
+  if (loading) {
+    return <Loading fullScreen text="Loading Dashboard..." />;
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:space-y-8">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-accent to-brand-600 bg-clip-text text-transparent">
             Dashboard Overview
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-sm md:text-base text-gray-600 mt-1">
             Welcome back! Here's what's happening today.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            className="px-3 md:px-4 py-2 text-sm md:text-base border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-400 focus:border-brand-400 outline-none text-gray-900 bg-white"
           >
             <option value="today">Today</option>
             <option value="week">This Week</option>
             <option value="month">This Month</option>
             <option value="year">This Year</option>
           </select>
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+          <button className="px-3 md:px-4 py-2 bg-gradient-to-r from-brand-500 to-brand-600 text-white rounded-xl hover:shadow-lg transition-all duration-200 flex items-center gap-2 text-sm md:text-base font-medium">
             <svg
-              className="w-5 h-5"
+              className="w-4 h-4 md:w-5 md:h-5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -248,17 +182,17 @@ export default function DashboardPage() {
                 d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
               />
             </svg>
-            Export Report
+            <span className="hidden sm:inline">Export Report</span>
           </button>
         </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-6">
         <StatCard
           title="Total Orders"
-          value={stats.totalOrders.value}
-          trend={stats.totalOrders.trend}
+          value={stats.totalOrders}
+          trend={{ value: "+12.5%", isPositive: true }}
           icon={
             <svg
               className="w-6 h-6"
@@ -277,8 +211,8 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Revenue"
-          value={stats.revenue.value}
-          trend={stats.revenue.trend}
+          value={`₹${stats.revenue.toLocaleString("en-IN")}`}
+          trend={{ value: "+8.3%", isPositive: true }}
           icon={
             <svg
               className="w-6 h-6"
@@ -297,8 +231,8 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Active Users"
-          value={stats.activeUsers.value}
-          trend={stats.activeUsers.trend}
+          value={stats.activeUsers}
+          trend={{ value: "+5.2%", isPositive: true }}
           icon={
             <svg
               className="w-6 h-6"
@@ -317,8 +251,8 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Completed Orders"
-          value={stats.completedOrders.value}
-          trend={stats.completedOrders.trend}
+          value={stats.completedOrders}
+          trend={{ value: "+15.1%", isPositive: true }}
           icon={
             <svg
               className="w-6 h-6"
@@ -337,8 +271,8 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Avg. Order Value"
-          value={stats.avgOrderValue.value}
-          trend={stats.avgOrderValue.trend}
+          value={`₹${stats.avgOrderValue.toLocaleString("en-IN")}`}
+          trend={{ value: "-2.1%", isPositive: false }}
           icon={
             <svg
               className="w-6 h-6"
@@ -357,8 +291,8 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Cancellation Rate"
-          value={stats.cancellationRate.value}
-          trend={stats.cancellationRate.trend}
+          value={`${stats.cancellationRate}%`}
+          trend={{ value: "-1.2%", isPositive: true }}
           subtitle="Lower is better"
           icon={
             <svg
@@ -379,89 +313,75 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts and Tables Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Order Status Distribution */}
         <Card title="Order Status Distribution" subtitle="Current breakdown">
-          <div className="space-y-4">
-            {[
-              {
-                status: "Completed",
-                count: 1089,
-                percentage: 87,
-                color: "bg-green-500",
-              },
-              {
-                status: "In Progress",
-                count: 78,
-                percentage: 6,
-                color: "bg-blue-500",
-              },
-              {
-                status: "Pending",
-                count: 45,
-                percentage: 4,
-                color: "bg-yellow-500",
-              },
-              {
-                status: "Cancelled",
-                count: 35,
-                percentage: 3,
-                color: "bg-red-500",
-              },
-            ].map((item) => (
-              <div key={item.status}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700">
-                    {item.status}
-                  </span>
-                  <span className="text-sm text-gray-600">
-                    {item.count} ({item.percentage}%)
-                  </span>
+          {orderStatusDistribution.length > 0 ? (
+            <div className="space-y-4">
+              {orderStatusDistribution.map((item) => (
+                <div key={item.status}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-gray-700">
+                      {item.status}
+                    </span>
+                    <span className="text-sm text-gray-600">
+                      {item.count} ({item.percentage}%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className={`${getStatusColor(
+                        item.color
+                      )} h-3 rounded-full transition-all duration-500`}
+                      style={{ width: `${item.percentage}%` }}
+                    ></div>
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className={`${item.color} h-2 rounded-full transition-all duration-500`}
-                    style={{ width: `${item.percentage}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-500 py-8">
+              No order data available
+            </p>
+          )}
         </Card>
 
         {/* Revenue Chart */}
         <Card title="Revenue Overview" subtitle="Last 7 days">
-          <div className="space-y-3">
-            {[
-              { day: "Mon", amount: 32000, height: 60 },
-              { day: "Tue", amount: 28000, height: 50 },
-              { day: "Wed", amount: 35000, height: 70 },
-              { day: "Thu", amount: 42000, height: 85 },
-              { day: "Fri", amount: 38000, height: 75 },
-              { day: "Sat", amount: 45000, height: 90 },
-              { day: "Sun", amount: 40000, height: 80 },
-            ].map((item) => (
-              <div key={item.day} className="flex items-center gap-4">
-                <div className="w-12 text-sm font-medium text-gray-600">
-                  {item.day}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-200 rounded-full h-8">
-                      <div
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-8 rounded-full flex items-center justify-end pr-3 transition-all duration-500"
-                        style={{ width: `${item.height}%` }}
-                      >
-                        <span className="text-xs text-white font-medium">
-                          ₹{(item.amount / 1000).toFixed(0)}k
-                        </span>
+          {revenueOverview.length > 0 ? (
+            <div className="space-y-3">
+              {revenueOverview.map((item) => (
+                <div
+                  key={item.date}
+                  className="flex items-center gap-3 md:gap-4"
+                >
+                  <div className="w-10 md:w-12 text-xs md:text-sm font-semibold text-gray-600">
+                    {item.day}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-gray-200 rounded-full h-7 md:h-8">
+                        <div
+                          className="bg-gradient-to-r from-brand-400 to-brand-600 h-7 md:h-8 rounded-full flex items-center justify-end pr-2 md:pr-3 transition-all duration-500"
+                          style={{ width: `${item.height}%` }}
+                        >
+                          {item.amount > 0 && (
+                            <span className="text-xs text-white font-semibold">
+                              ₹{(item.amount / 1000).toFixed(0)}k
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-500 py-8">
+              No revenue data available
+            </p>
+          )}
         </Card>
       </div>
 
@@ -470,126 +390,158 @@ export default function DashboardPage() {
         title="Recent Orders"
         subtitle="Latest customer bookings"
         action={
-          <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+          <button className="text-xs md:text-sm text-brand-600 hover:text-brand-700 font-semibold transition-colors">
             View All →
           </button>
         }
       >
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                  Order ID
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                  Customer
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                  Service
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                  Amount
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                  Status
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                  Time
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentOrders.map((order) => (
-                <tr
-                  key={order.id}
-                  className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                >
-                  <td className="py-3 px-4">
-                    <span className="font-medium text-gray-900">
-                      {order.id}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-gray-700">{order.customer}</td>
-                  <td className="py-3 px-4 text-gray-700">{order.service}</td>
-                  <td className="py-3 px-4 font-medium text-gray-900">
-                    ₹{order.amount}
-                  </td>
-                  <td className="py-3 px-4">{getStatusBadge(order.status)}</td>
-                  <td className="py-3 px-4 text-sm text-gray-500">
-                    {order.time}
-                  </td>
+        <div className="overflow-x-auto -mx-4 md:mx-0">
+          <div className="inline-block min-w-full align-middle">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b-2 border-gray-200">
+                  <th className="text-left py-3 px-3 md:px-4 text-xs font-bold text-gray-600 uppercase tracking-wide">
+                    Order ID
+                  </th>
+                  <th className="text-left py-3 px-3 md:px-4 text-xs font-bold text-gray-600 uppercase tracking-wide">
+                    Customer
+                  </th>
+                  <th className="text-left py-3 px-3 md:px-4 text-xs font-bold text-gray-600 uppercase tracking-wide hidden sm:table-cell">
+                    Service
+                  </th>
+                  <th className="text-left py-3 px-3 md:px-4 text-xs font-bold text-gray-600 uppercase tracking-wide">
+                    Amount
+                  </th>
+                  <th className="text-left py-3 px-3 md:px-4 text-xs font-bold text-gray-600 uppercase tracking-wide">
+                    Status
+                  </th>
+                  <th className="text-left py-3 px-3 md:px-4 text-xs font-bold text-gray-600 uppercase tracking-wide hidden md:table-cell">
+                    Time
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {recentOrders.length > 0 ? (
+                  recentOrders.map((order) => (
+                    <tr
+                      key={order.id}
+                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="py-3 px-3 md:px-4">
+                        <span className="font-semibold text-gray-900 text-sm">
+                          {order.id}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 md:px-4 text-gray-700 text-sm">
+                        {order.customer}
+                      </td>
+                      <td className="py-3 px-3 md:px-4 text-gray-700 text-sm hidden sm:table-cell">
+                        {order.service}
+                      </td>
+                      <td className="py-3 px-3 md:px-4 font-semibold text-gray-900 text-sm">
+                        ₹{order.amount.toLocaleString()}
+                      </td>
+                      <td className="py-3 px-3 md:px-4">
+                        {getStatusBadge(order.status)}
+                      </td>
+                      <td className="py-3 px-3 md:px-4 text-xs md:text-sm text-gray-500 hidden md:table-cell">
+                        {order.time}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="text-center py-8 text-gray-500">
+                      No recent orders
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </Card>
 
       {/* Service Analytics */}
-      <Card title="Top Services" subtitle="Most booked services this month">
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                  Service Name
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                  Bookings
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                  Revenue
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                  Growth
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                  Popularity
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {serviceAnalytics.map((service, index) => (
-                <tr
-                  key={service.name}
-                  className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                >
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-900">
-                        {service.name}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-gray-700">
-                    {service.bookings}
-                  </td>
-                  <td className="py-3 px-4 font-medium text-gray-900">
-                    ₹{service.revenue.toLocaleString()}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span
-                      className={`flex items-center text-sm ${
-                        service.growth >= 0 ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      {service.growth >= 0 ? "↑" : "↓"}{" "}
-                      {Math.abs(service.growth)}%
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${(service.bookings / 250) * 100}%` }}
-                      ></div>
-                    </div>
-                  </td>
+      <Card title="Top Services" subtitle="Most booked services">
+        <div className="overflow-x-auto -mx-4 md:mx-0">
+          <div className="inline-block min-w-full align-middle">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b-2 border-gray-200">
+                  <th className="text-left py-3 px-3 md:px-4 text-xs font-bold text-gray-600 uppercase tracking-wide">
+                    Rank
+                  </th>
+                  <th className="text-left py-3 px-3 md:px-4 text-xs font-bold text-gray-600 uppercase tracking-wide">
+                    Service Name
+                  </th>
+                  <th className="text-left py-3 px-3 md:px-4 text-xs font-bold text-gray-600 uppercase tracking-wide">
+                    Bookings
+                  </th>
+                  <th className="text-left py-3 px-3 md:px-4 text-xs font-bold text-gray-600 uppercase tracking-wide hidden sm:table-cell">
+                    Revenue
+                  </th>
+                  <th className="text-left py-3 px-3 md:px-4 text-xs font-bold text-gray-600 uppercase tracking-wide hidden md:table-cell">
+                    Popularity
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {topServices.length > 0 ? (
+                  topServices.map((service) => {
+                    const maxBookings = Math.max(
+                      ...topServices.map((s) => s.bookings),
+                      1
+                    );
+                    const popularityWidth =
+                      (service.bookings / maxBookings) * 100;
+                    return (
+                      <tr
+                        key={service.rank}
+                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="py-3 px-3 md:px-4">
+                          <span className="flex items-center justify-center w-7 h-7 rounded-full bg-brand-100 text-brand-700 font-bold text-sm">
+                            {service.rank}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 md:px-4">
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-gray-900 text-sm">
+                              {service.name}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {service.category}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 md:px-4 text-gray-700 font-semibold text-sm">
+                          {service.bookings}
+                        </td>
+                        <td className="py-3 px-3 md:px-4 font-semibold text-gray-900 text-sm hidden sm:table-cell">
+                          ₹{service.revenue.toLocaleString()}
+                        </td>
+                        <td className="py-3 px-3 md:px-4 hidden md:table-cell">
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div
+                              className="bg-gradient-to-r from-brand-400 to-brand-600 h-3 rounded-full transition-all duration-500"
+                              style={{ width: `${popularityWidth}%` }}
+                            ></div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="text-center py-8 text-gray-500">
+                      No service data available
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </Card>
     </div>

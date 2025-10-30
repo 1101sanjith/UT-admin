@@ -1,0 +1,79 @@
+╔══════════════════════════════════════════════════════════════╗
+║                   TOTP AUTHENTICATION                        ║
+║                    QUICK REFERENCE                           ║
+╚══════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────┐
+│ LOGIN CREDENTIALS                                             │
+├──────────────────────────────────────────────────────────────┤
+│ Email:    sanjithrozario@gmail.com                          │
+│ Password: [6-digit TOTP from Google Authenticator]          │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│ TOTP SECRET                                                   │
+├──────────────────────────────────────────────────────────────┤
+│ Formatted: JBSW Y3DP EHPK 3PXP                              │
+│ Raw:       JBSWY3DPEHPK3PXP                                 │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│ URLS                                                          │
+├──────────────────────────────────────────────────────────────┤
+│ Login:     http://localhost:3001/login                      │
+│ Setup:     http://localhost:3001/totp-setup                 │
+│ Dashboard: http://localhost:3001/dashboard                  │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│ COMMANDS                                                      │
+├──────────────────────────────────────────────────────────────┤
+│ Start app:         npm run dev                              │
+│ Current TOTP:      npm run totp                             │
+│ Show QR:           npm run totp:qr                          │
+│ Full setup:        npm run totp:setup                       │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│ SETUP STEPS                                                   │
+├──────────────────────────────────────────────────────────────┤
+│ 1. Run: npm run dev                                          │
+│ 2. Open: http://localhost:3001/totp-setup                   │
+│ 3. Scan QR code with Google Authenticator                   │
+│ 4. Go to login page                                          │
+│ 5. Enter email and TOTP code                                 │
+│ 6. Access granted!                                            │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│ FILES CREATED                                                 │
+├──────────────────────────────────────────────────────────────┤
+│ lib/totp.ts                        - TOTP utilities         │
+│ app/api/auth/verify-totp/route.ts  - Verification API       │
+│ app/api/auth/totp-setup/route.ts   - Setup info API         │
+│ app/login/page.tsx                 - Login UI                │
+│ app/totp-setup/page.tsx            - Setup UI with QR        │
+│ totp-cli.js                        - Command line tool       │
+│ .env.local                         - Environment vars        │
+│ TOTP_SETUP_GUIDE.md                - Full documentation      │
+│ TOTP_IMPLEMENTATION_SUMMARY.md     - Complete summary        │
+│ QUICK_REFERENCE.txt                - This file               │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│ TROUBLESHOOTING                                               │
+├──────────────────────────────────────────────────────────────┤
+│ "Invalid TOTP":                                              │
+│   ✓ Check phone time is synchronized                        │
+│   ✓ Use fresh code (expires every 30 seconds)               │
+│   ✓ Verify email is exact match                             │
+│                                                               │
+│ "QR not showing":                                            │
+│   ✓ Check browser console for errors                        │
+│   ✓ Verify: npm list qrcode speakeasy                       │
+│   ✓ Test: http://localhost:3001/api/auth/totp-setup         │
+└──────────────────────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════════════════════╗
+║  For complete documentation, see: TOTP_SETUP_GUIDE.md       ║
+╚══════════════════════════════════════════════════════════════╝

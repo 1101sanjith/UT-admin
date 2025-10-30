@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
-import { supabase } from "@/lib/supabase";
 
 export default function ServicesPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -26,7 +25,6 @@ export default function ServicesPage() {
     what_we_do: [] as string[],
     what_we_dont: [] as string[],
     how_its_done: [] as string[],
-    service_image: "",
     is_active: true,
   });
 
@@ -37,15 +35,15 @@ export default function ServicesPage() {
   const fetchServices = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("services")
-        .select("*")
-        .order("display_order", { ascending: true });
+      const response = await fetch("/api/services");
+      const result = await response.json();
 
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to fetch services");
+      }
 
       // Transform the data to match the UI format
-      const transformedData = (data || []).map((service: any) => ({
+      const transformedData = (result.data || []).map((service: any) => ({
         id: service.id,
         name: service.name,
         icon: service.icon,
@@ -54,15 +52,15 @@ export default function ServicesPage() {
         weDo: service.what_we_do || [],
         weDont: service.what_we_dont || [],
         howItsDone: service.how_its_done || [],
-        serviceImage: service.service_image,
         isActive: service.is_active,
         status: service.is_active ? "Active" : "Inactive",
         displayOrder: service.display_order,
       }));
 
       setServices(transformedData);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching services:", error);
+      alert(`Failed to load services: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -82,7 +80,6 @@ export default function ServicesPage() {
       what_we_do: service.weDo || [],
       what_we_dont: service.weDont || [],
       how_its_done: service.howItsDone || [],
-      service_image: service.serviceImage || "",
       is_active: service.isActive,
     });
     setIsEditMode(false);
@@ -95,12 +92,11 @@ export default function ServicesPage() {
     setEditForm({
       name: "",
       icon: "",
-      color: "#3B82F6",
+      color: "#4CAF50",
       price: "",
       what_we_do: [""],
       what_we_dont: [""],
       how_its_done: [""],
-      service_image: "",
       is_active: true,
     });
     setIsAddMode(true);
@@ -161,9 +157,9 @@ export default function ServicesPage() {
     try {
       // Filter out empty strings from arrays
       const cleanedData = {
-        name: editForm.name,
-        icon: editForm.icon,
-        color: editForm.color,
+        name: editForm.name.trim(),
+        icon: editForm.icon.trim(),
+        color: editForm.color || "#4CAF50",
         price: parseFloat(editForm.price),
         what_we_do: editForm.what_we_do.filter((item) => item.trim() !== ""),
         what_we_dont: editForm.what_we_dont.filter(
@@ -172,30 +168,28 @@ export default function ServicesPage() {
         how_its_done: editForm.how_its_done.filter(
           (item) => item.trim() !== ""
         ),
-        service_image: editForm.service_image,
         is_active: editForm.is_active,
       };
 
+      console.log("Saving service data:", cleanedData);
+
       if (isAddMode) {
         // Creating new service
-        // Get the highest display_order and add 1
-        const { data: maxOrderData } = await supabase
-          .from("services")
-          .select("display_order")
-          .order("display_order", { ascending: false })
-          .limit(1);
-
-        const nextDisplayOrder =
-          maxOrderData && maxOrderData.length > 0
-            ? (maxOrderData[0].display_order || 0) + 1
-            : 1;
-
-        const { error } = await supabase.from("services").insert({
-          ...cleanedData,
-          display_order: nextDisplayOrder,
+        const response = await fetch("/api/services", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(cleanedData),
         });
 
-        if (error) throw error;
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            result.error || result.details || "Failed to create service"
+          );
+        }
 
         alert("Service created successfully!");
         setIsModalOpen(false);
@@ -204,21 +198,35 @@ export default function ServicesPage() {
         // Updating existing service
         if (!selectedService) return;
 
-        const { error } = await supabase
-          .from("services")
-          .update(cleanedData)
-          .eq("id", selectedService.id);
+        const response = await fetch("/api/services", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: selectedService.id,
+            ...cleanedData,
+          }),
+        });
 
-        if (error) throw error;
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            result.error || result.details || "Failed to update service"
+          );
+        }
 
         setIsEditMode(false);
         alert("Service updated successfully!");
       }
 
       await fetchServices();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving service:", error);
-      alert(`Failed to ${isAddMode ? "create" : "update"} service`);
+      alert(
+        `Failed to ${isAddMode ? "create" : "update"} service: ${error.message}`
+      );
     }
   };
 
@@ -227,19 +235,30 @@ export default function ServicesPage() {
 
     try {
       const newStatus = !editForm.is_active;
-      const { error } = await supabase
-        .from("services")
-        .update({ is_active: newStatus })
-        .eq("id", selectedService.id);
 
-      if (error) throw error;
+      const response = await fetch("/api/services", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: selectedService.id,
+          is_active: newStatus,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to update service status");
+      }
 
       setEditForm((prev) => ({ ...prev, is_active: newStatus }));
       await fetchServices();
       alert(`Service ${newStatus ? "activated" : "deactivated"} successfully!`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error toggling service status:", error);
-      alert("Failed to update service status");
+      alert(`Failed to update service status: ${error.message}`);
     }
   };
 
@@ -255,19 +274,22 @@ export default function ServicesPage() {
     }
 
     try {
-      const { error } = await supabase
-        .from("services")
-        .delete()
-        .eq("id", selectedService.id);
+      const response = await fetch(`/api/services?id=${selectedService.id}`, {
+        method: "DELETE",
+      });
 
-      if (error) throw error;
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to delete service");
+      }
 
       await fetchServices();
       setIsModalOpen(false);
       alert("Service deleted successfully!");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting service:", error);
-      alert("Failed to delete service");
+      alert(`Failed to delete service: ${error.message}`);
     }
   };
 
@@ -481,125 +503,89 @@ export default function ServicesPage() {
         size="lg"
       >
         {(selectedService || isAddMode) && (
-          <div className="space-y-6">
-            {/* Service Header */}
-            <div className="flex items-start gap-4">
-              <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-4xl">
-                {isEditMode ? (
-                  <input
-                    type="text"
-                    value={editForm.icon}
-                    onChange={(e) => handleInputChange("icon", e.target.value)}
-                    className="w-full h-full text-center text-4xl bg-transparent outline-none"
-                    maxLength={2}
-                    placeholder="🔧"
-                  />
-                ) : (
-                  selectedService?.icon
-                )}
-              </div>
-              <div className="flex-1">
-                {isEditMode ? (
+          <div className="space-y-5">
+            {/* Add/Edit Mode - Form Style */}
+            {isAddMode || isEditMode ? (
+              <>
+                {/* Service Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Service name:
+                  </label>
                   <input
                     type="text"
                     value={editForm.name}
                     onChange={(e) => handleInputChange("name", e.target.value)}
-                    className="text-2xl font-bold text-gray-900 border-b-2 border-gray-300 focus:border-blue-500 outline-none w-full"
-                    placeholder="Service Name"
+                    className="w-full px-3 py-2 border-b-2 border-gray-300 focus:border-blue-500 outline-none text-gray-900 bg-white"
+                    placeholder="Enter service name"
                   />
-                ) : (
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    {selectedService?.name}
-                  </h2>
-                )}
-                <div className="mt-2 flex items-center gap-2">
-                  <Badge variant={editForm.is_active ? "success" : "danger"}>
-                    {editForm.is_active ? "Active" : "Inactive"}
-                  </Badge>
-                  {isEditMode && (
+                </div>
+
+                {/* Service Icon */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Service icon:
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.icon}
+                    onChange={(e) => handleInputChange("icon", e.target.value)}
+                    className="w-full px-3 py-2 border-b-2 border-gray-300 focus:border-blue-500 outline-none text-gray-900 bg-white"
+                    placeholder="Enter emoji icon (e.g., 🧹)"
+                    maxLength={4}
+                  />
+                </div>
+
+                {/* Background Color */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Background color:
+                  </label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={editForm.color}
+                      onChange={(e) =>
+                        handleInputChange("color", e.target.value)
+                      }
+                      className="h-10 w-16 border border-gray-300 rounded cursor-pointer"
+                    />
                     <input
                       type="text"
                       value={editForm.color}
                       onChange={(e) =>
                         handleInputChange("color", e.target.value)
                       }
-                      className="text-sm px-2 py-1 border border-gray-300 rounded"
-                      placeholder="Color code (e.g., #3B82F6)"
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Pricing */}
-            <div className="border-t pt-4">
-              <h3 className="font-semibold text-gray-900 mb-2">Pricing</h3>
-              <div className="bg-blue-50 rounded-lg p-4">
-                <p className="text-sm text-gray-600">Starting Price</p>
-                {isEditMode ? (
-                  <div className="flex items-center">
-                    <span className="text-3xl font-bold text-blue-600 mr-2">
-                      ₹
-                    </span>
-                    <input
-                      type="number"
-                      value={editForm.price}
-                      onChange={(e) =>
-                        handleInputChange("price", e.target.value)
-                      }
-                      className="text-3xl font-bold text-blue-600 bg-transparent border-b-2 border-blue-300 outline-none flex-1"
-                      placeholder="0"
-                      min="0"
+                      className="flex-1 px-3 py-2 border-b-2 border-gray-300 focus:border-blue-500 outline-none text-gray-900 bg-white"
+                      placeholder="#4CAF50"
                     />
                   </div>
-                ) : (
-                  <p className="text-3xl font-bold text-blue-600 mt-1">
-                    ₹{selectedService?.price}
-                  </p>
-                )}
-              </div>
-            </div>
+                </div>
 
-            {/* Service Image URL */}
-            {isEditMode && (
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-2">
-                  Service Image URL
-                </h3>
-                <input
-                  type="text"
-                  value={editForm.service_image}
-                  onChange={(e) =>
-                    handleInputChange("service_image", e.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="https://example.com/image.jpg"
-                />
-              </div>
-            )}
+                {/* Price */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Price:
+                  </label>
+                  <input
+                    type="number"
+                    value={editForm.price}
+                    onChange={(e) => handleInputChange("price", e.target.value)}
+                    className="w-full px-3 py-2 border-b-2 border-gray-300 focus:border-blue-500 outline-none text-gray-900 bg-white"
+                    placeholder="Enter price"
+                    min="0"
+                  />
+                </div>
 
-            {/* What We Do */}
-            <div className="border-t pt-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold text-gray-900">What We Do</h3>
-                {isEditMode && (
-                  <button
-                    onClick={() => handleAddArrayField("what_we_do")}
-                    className="text-blue-600 text-sm hover:underline"
-                  >
-                    + Add
-                  </button>
-                )}
-              </div>
-              <ul className="space-y-2">
-                {(isEditMode
-                  ? editForm.what_we_do
-                  : selectedService.weDo || []
-                ).map((item: string, index: number) => (
-                  <li key={index} className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    {isEditMode ? (
-                      <div className="flex-1 flex gap-2">
+                {/* What We Do */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    What We do:
+                  </label>
+                  <div className="space-y-2">
+                    {editForm.what_we_do.map((item: string, index: number) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <span className="text-green-500 text-lg">✓</span>
                         <input
                           type="text"
                           value={item}
@@ -610,141 +596,136 @@ export default function ServicesPage() {
                               e.target.value
                             )
                           }
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                          className="flex-1 px-3 py-2 border-b-2 border-gray-300 focus:border-blue-500 outline-none text-gray-900 bg-white"
+                          placeholder="Enter what we do"
                         />
-                        <button
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleAddArrayField("what_we_do")}
+                          className="px-3 py-1 text-sm"
+                        >
+                          Add
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
                           onClick={() =>
                             handleRemoveArrayField("what_we_do", index)
                           }
-                          className="text-red-600 text-sm hover:underline"
+                          className="px-3 py-1 text-sm text-red-600 border-red-300 hover:border-red-400"
                         >
                           Remove
-                        </button>
+                        </Button>
                       </div>
-                    ) : (
-                      <span className="text-gray-700">{item}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
+                    ))}
+                  </div>
+                </div>
 
-            {/* What We Don't Do */}
-            <div className="border-t pt-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold text-gray-900">
-                  What We Don't Do
-                </h3>
-                {isEditMode && (
-                  <button
-                    onClick={() => handleAddArrayField("what_we_dont")}
-                    className="text-blue-600 text-sm hover:underline"
-                  >
-                    + Add
-                  </button>
-                )}
-              </div>
-              <ul className="space-y-2">
-                {(isEditMode
-                  ? editForm.what_we_dont
-                  : selectedService.weDont || []
-                ).map((item: string, index: number) => (
-                  <li key={index} className="flex items-start gap-2">
-                    <span className="text-red-500 mt-1">✗</span>
-                    {isEditMode ? (
-                      <div className="flex-1 flex gap-2">
-                        <input
-                          type="text"
-                          value={item}
-                          onChange={(e) =>
-                            handleArrayFieldChange(
-                              "what_we_dont",
-                              index,
-                              e.target.value
-                            )
-                          }
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
-                        <button
-                          onClick={() =>
-                            handleRemoveArrayField("what_we_dont", index)
-                          }
-                          className="text-red-600 text-sm hover:underline"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-gray-700">{item}</span>
+                {/* What We Don't Do */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    What We don't do:
+                  </label>
+                  <div className="space-y-2">
+                    {editForm.what_we_dont.map(
+                      (item: string, index: number) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <span className="text-red-500 text-lg">✗</span>
+                          <input
+                            type="text"
+                            value={item}
+                            onChange={(e) =>
+                              handleArrayFieldChange(
+                                "what_we_dont",
+                                index,
+                                e.target.value
+                              )
+                            }
+                            className="flex-1 px-3 py-2 border-b-2 border-gray-300 focus:border-blue-500 outline-none text-gray-900 bg-white"
+                            placeholder="Enter what we don't do"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleAddArrayField("what_we_dont")}
+                            className="px-3 py-1 text-sm"
+                          >
+                            Add
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              handleRemoveArrayField("what_we_dont", index)
+                            }
+                            className="px-3 py-1 text-sm text-red-600 border-red-300 hover:border-red-400"
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      )
                     )}
-                  </li>
-                ))}
-              </ul>
-            </div>
+                  </div>
+                </div>
 
-            {/* How It's Done */}
-            <div className="border-t pt-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold text-gray-900">How It's Done</h3>
-                {isEditMode && (
-                  <button
-                    onClick={() => handleAddArrayField("how_its_done")}
-                    className="text-blue-600 text-sm hover:underline"
-                  >
-                    + Add
-                  </button>
-                )}
-              </div>
-              <ol className="space-y-2">
-                {(isEditMode
-                  ? editForm.how_its_done
-                  : selectedService.howItsDone || []
-                ).map((item: string, index: number) => (
-                  <li key={index} className="flex items-start gap-2">
-                    <span className="text-blue-600 font-semibold mt-1">
-                      {index + 1}.
-                    </span>
-                    {isEditMode ? (
-                      <div className="flex-1 flex gap-2">
-                        <input
-                          type="text"
-                          value={item}
-                          onChange={(e) =>
-                            handleArrayFieldChange(
-                              "how_its_done",
-                              index,
-                              e.target.value
-                            )
-                          }
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
-                        <button
-                          onClick={() =>
-                            handleRemoveArrayField("how_its_done", index)
-                          }
-                          className="text-red-600 text-sm hover:underline"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-gray-700">{item}</span>
+                {/* How It's Work */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    How it's Work:
+                  </label>
+                  <div className="space-y-2">
+                    {editForm.how_its_done.map(
+                      (item: string, index: number) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <span className="text-blue-600 font-semibold">
+                            {index + 1}.
+                          </span>
+                          <input
+                            type="text"
+                            value={item}
+                            onChange={(e) =>
+                              handleArrayFieldChange(
+                                "how_its_done",
+                                index,
+                                e.target.value
+                              )
+                            }
+                            className="flex-1 px-3 py-2 border-b-2 border-gray-300 focus:border-blue-500 outline-none text-gray-900 bg-white"
+                            placeholder="Enter step"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleAddArrayField("how_its_done")}
+                            className="px-3 py-1 text-sm"
+                          >
+                            Add
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              handleRemoveArrayField("how_its_done", index)
+                            }
+                            className="px-3 py-1 text-sm text-red-600 border-red-300 hover:border-red-400"
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      )
                     )}
-                  </li>
-                ))}
-              </ol>
-            </div>
+                  </div>
+                </div>
 
-            {/* Actions */}
-            <div className="border-t pt-4 flex gap-3">
-              {isEditMode ? (
-                <>
+                {/* Actions */}
+                <div className="flex gap-3 pt-4">
                   <Button
                     variant="primary"
                     className="flex-1"
                     onClick={handleSaveService}
                   >
-                    {isAddMode ? "Create Service" : "Save Changes"}
+                    {isAddMode ? "Create" : "Save Changes"}
                   </Button>
                   <Button
                     variant="outline"
@@ -760,9 +741,104 @@ export default function ServicesPage() {
                   >
                     Cancel
                   </Button>
-                </>
-              ) : (
-                <>
+                </div>
+              </>
+            ) : (
+              /* View Mode - Display Style */
+              <>
+                {/* Service Header */}
+                <div className="flex items-start gap-4">
+                  <div
+                    className="w-20 h-20 rounded-lg flex items-center justify-center text-4xl"
+                    style={{
+                      backgroundColor: selectedService?.color || "#4CAF50",
+                    }}
+                  >
+                    {selectedService?.icon}
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      {selectedService?.name}
+                    </h2>
+                    <div className="mt-2 flex items-center gap-2">
+                      <Badge
+                        variant={editForm.is_active ? "success" : "danger"}
+                      >
+                        {editForm.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                      <span className="text-sm text-gray-600">
+                        Color: {selectedService?.color}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pricing */}
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">Pricing</h3>
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <p className="text-sm text-gray-600">Starting Price</p>
+                    <p className="text-3xl font-bold text-blue-600 mt-1">
+                      ₹{selectedService?.price}
+                    </p>
+                  </div>
+                </div>
+
+                {/* What We Do */}
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">
+                    What We Do
+                  </h3>
+                  <ul className="space-y-2">
+                    {(selectedService.weDo || []).map(
+                      (item: string, index: number) => (
+                        <li key={index} className="flex items-start gap-2">
+                          <span className="text-green-500 mt-1">✓</span>
+                          <span className="text-gray-700">{item}</span>
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </div>
+
+                {/* What We Don't Do */}
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">
+                    What We Don't Do
+                  </h3>
+                  <ul className="space-y-2">
+                    {(selectedService.weDont || []).map(
+                      (item: string, index: number) => (
+                        <li key={index} className="flex items-start gap-2">
+                          <span className="text-red-500 mt-1">✗</span>
+                          <span className="text-gray-700">{item}</span>
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </div>
+
+                {/* How It's Done */}
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">
+                    How It's Done
+                  </h3>
+                  <ol className="space-y-2">
+                    {(selectedService.howItsDone || []).map(
+                      (item: string, index: number) => (
+                        <li key={index} className="flex items-start gap-2">
+                          <span className="text-blue-600 font-semibold mt-1">
+                            {index + 1}.
+                          </span>
+                          <span className="text-gray-700">{item}</span>
+                        </li>
+                      )
+                    )}
+                  </ol>
+                </div>
+
+                {/* Actions */}
+                <div className="border-t pt-4 flex gap-3">
                   <Button
                     variant="primary"
                     className="flex-1"
@@ -780,9 +856,9 @@ export default function ServicesPage() {
                   <Button variant="danger" onClick={handleDeleteService}>
                     Delete
                   </Button>
-                </>
-              )}
-            </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </Modal>
