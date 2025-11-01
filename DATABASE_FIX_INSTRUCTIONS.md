@@ -3,14 +3,17 @@
 ## Issues Fixed
 
 ### 1. **Addresses Foreign Key Constraint Error**
+
 **Problem:** `insert or update on table "addresses" violates foreign key constraint "address_user_id_fkey"`
 
 **Solution:** Removed `NOT NULL` constraint from `user_id` column in addresses table.
 
 ### 2. **Service Tasks Not Displaying**
+
 **Problem:** Order details modal wasn't showing individual service tasks.
 
-**Solution:** 
+**Solution:**
+
 - Added `orderItems` state to store fetched order items
 - Added `fetchOrderItems()` function to fetch items from `/api/orders/[id]` endpoint
 - Updated API endpoint to use `orders_full_view_table` instead of deleted `orders_full_view` view
@@ -21,9 +24,11 @@
   - Assign Provider button
 
 ### 3. **Database Connectivity**
+
 **Problem:** Using `orders_full_view_table` instead of deleted `orders_full_view`.
 
-**Solution:** 
+**Solution:**
+
 - Updated `/app/api/orders/[id]/route.ts` to query from `orders_full_view_table`
 - All frontend pages already updated to use `orders_full_view_table`
 
@@ -42,6 +47,7 @@ In your Supabase SQL Editor, run the `fix-database-issues.sql` file:
 ```
 
 This will:
+
 - Fix the addresses constraint
 - Sync `orders_full_view_table` with existing orders
 - Verify data integrity
@@ -54,11 +60,12 @@ After running the SQL script, check the output for:
 ✅ `Addresses foreign key constraint fixed`  
 ✅ `orders_full_view_table synced successfully`  
 ✅ Database has order data  
-✅ Sample data displays correctly  
+✅ Sample data displays correctly
 
 ### Step 3: Test the Application
 
 1. **Start the development server:**
+
    ```powershell
    npm run dev
    ```
@@ -66,8 +73,8 @@ After running the SQL script, check the output for:
 2. **Navigate to Orders page:**
    - Go to `/dashboard/orders`
    - Click "View" on any order
-   
 3. **Verify service tasks are displayed:**
+
    - You should see horizontal scrollable cards
    - Each card shows a service task with icon, name, quantity, and prices
    - "Assign Provider" button should be visible on each task
@@ -81,12 +88,15 @@ After running the SQL script, check the output for:
 ## Database Schema Changes
 
 ### `addresses` Table
+
 **Before:**
+
 ```sql
 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
 ```
 
 **After:**
+
 ```sql
 user_id UUID REFERENCES users(id) ON DELETE CASCADE
 ```
@@ -96,11 +106,13 @@ user_id UUID REFERENCES users(id) ON DELETE CASCADE
 **File:** `/app/api/orders/[id]/route.ts`
 
 **Before:**
+
 ```typescript
 .from("orders_full_view")
 ```
 
 **After:**
+
 ```typescript
 .from("orders_full_view_table")
 ```
@@ -112,12 +124,15 @@ user_id UUID REFERENCES users(id) ON DELETE CASCADE
 ### Modified Files:
 
 1. **`complete_database_scema.sql`**
+
    - Removed `NOT NULL` from `addresses.user_id`
 
 2. **`app/api/orders/[id]/route.ts`**
+
    - Changed query from `orders_full_view` to `orders_full_view_table`
 
 3. **`app/dashboard/orders/page.tsx`**
+
    - Added `orderItems` and `loadingItems` state
    - Added `fetchOrderItems()` function
    - Updated `handleViewDetails()` to fetch order items
@@ -133,19 +148,23 @@ user_id UUID REFERENCES users(id) ON DELETE CASCADE
 ### Order Details Modal Should Show:
 
 1. **Order Summary** (Grid with 4 items)
+
    - Order Number
    - Status badge
-   - Date & Time  
+   - Date & Time
    - Amount
 
 2. **Customer Information**
+
    - Name, Phone, Email, Address
 
 3. **Service Details**
+
    - Service count
    - Payment method
 
 4. **Service Tasks** ← NEW SECTION
+
    - Horizontal scrollable cards (320px each)
    - Each task shows:
      - Icon (emoji) + Service name
@@ -164,12 +183,14 @@ user_id UUID REFERENCES users(id) ON DELETE CASCADE
 ### If service tasks don't appear:
 
 1. **Check browser console for errors:**
+
    ```javascript
    // Should see:
    📦 Order items fetched: [{service_name: "...", ...}]
    ```
 
 2. **Verify order_items table has data:**
+
    ```sql
    SELECT * FROM order_items LIMIT 5;
    ```
@@ -183,6 +204,7 @@ user_id UUID REFERENCES users(id) ON DELETE CASCADE
 ### If you see "No service tasks found":
 
 This means `order_items` table is empty for that order. You need to:
+
 - Create orders through the app (not manually in database)
 - Or manually insert order_items for existing orders
 
@@ -198,6 +220,7 @@ After applying these fixes:
 4. ✅ All order data fetches properly
 
 You can now:
+
 - View complete order details with all service tasks
 - Assign providers to individual tasks (button ready, needs backend implementation)
 - Track order timeline and status

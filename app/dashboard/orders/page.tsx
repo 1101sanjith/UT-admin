@@ -618,7 +618,9 @@ export default function OrdersPage() {
 
             {/* Service Tasks */}
             <div className="border-t pt-4">
-              <h3 className="font-semibold text-gray-900 mb-3">Service Tasks</h3>
+              <h3 className="font-semibold text-gray-900 mb-3">
+                Service Tasks
+              </h3>
               {loadingItems ? (
                 <div className="text-center py-4">
                   <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -633,7 +635,9 @@ export default function OrdersPage() {
                     >
                       {/* Task Header */}
                       <div className="flex items-center gap-3 mb-3">
-                        <div className="text-3xl">{item.service_icon || "🔧"}</div>
+                        <div className="text-3xl">
+                          {item.service_icon || "🔧"}
+                        </div>
                         <div className="flex-1">
                           <h4 className="font-semibold text-gray-900">
                             {item.service_name}
