@@ -69,7 +69,7 @@ export default function DashboardPage() {
 
       // Fetch recent orders
       const { data: recentOrdersData } = await supabase
-        .from("orders_full_view")
+        .from("orders_full_view_table")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(5);

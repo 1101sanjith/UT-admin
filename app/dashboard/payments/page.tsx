@@ -28,7 +28,7 @@ export default function PaymentsPage() {
       setLoading(true);
 
       const { data: ordersData, error } = await supabase
-        .from("orders_full_view")
+        .from("orders_full_view_table")
         .select("*")
         .order("created_at", { ascending: false });
 

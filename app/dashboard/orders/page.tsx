@@ -17,6 +17,8 @@ export default function OrdersPage() {
   const [actionModalOpen, setActionModalOpen] = useState(false);
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [orderItems, setOrderItems] = useState<any[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
 
   // Fetch orders from Supabase
   useEffect(() => {
@@ -27,7 +29,7 @@ export default function OrdersPage() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from("orders_full_view")
+        .from("orders_full_view_table")
         .select("*")
         .order("created_at", { ascending: false });
 
@@ -277,9 +279,29 @@ export default function OrdersPage() {
     return matchesStatus && matchesSearch;
   });
 
-  const handleViewDetails = (order: any) => {
+  const handleViewDetails = async (order: any) => {
     setSelectedOrder(order);
     setIsModalOpen(true);
+    // Fetch order items
+    await fetchOrderItems(order.id);
+  };
+
+  const fetchOrderItems = async (orderId: string) => {
+    try {
+      setLoadingItems(true);
+      const response = await fetch(`/api/orders/${orderId}`);
+      const data = await response.json();
+
+      if (data.items) {
+        console.log("📦 Order items fetched:", data.items);
+        setOrderItems(data.items);
+      }
+    } catch (error) {
+      console.error("Error fetching order items:", error);
+      setOrderItems([]);
+    } finally {
+      setLoadingItems(false);
+    }
   };
 
   const handleAction = (order: any) => {
@@ -592,6 +614,84 @@ export default function OrdersPage() {
                   </p>
                 )}
               </div>
+            </div>
+
+            {/* Service Tasks */}
+            <div className="border-t pt-4">
+              <h3 className="font-semibold text-gray-900 mb-3">Service Tasks</h3>
+              {loadingItems ? (
+                <div className="text-center py-4">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <p className="text-sm text-gray-500 mt-2">Loading tasks...</p>
+                </div>
+              ) : orderItems.length > 0 ? (
+                <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
+                  {orderItems.map((item: any) => (
+                    <div
+                      key={item.id}
+                      className="flex-shrink-0 w-[320px] bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
+                    >
+                      {/* Task Header */}
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="text-3xl">{item.service_icon || "🔧"}</div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900">
+                            {item.service_name}
+                          </h4>
+                          <p className="text-xs text-gray-500">
+                            Qty: {item.quantity}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Price Info */}
+                      <div className="bg-gray-50 rounded-md px-3 py-2 mb-3">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-gray-600">Unit Price:</span>
+                          <span className="font-medium text-gray-900">
+                            ₹{parseFloat(item.unit_price).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm mt-1">
+                          <span className="text-gray-600">Total:</span>
+                          <span className="font-bold text-gray-900">
+                            ₹{parseFloat(item.total_price).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Description if available */}
+                      {item.service_description && (
+                        <p className="text-xs text-gray-600 mb-3">
+                          {item.service_description}
+                        </p>
+                      )}
+
+                      {/* Action Button */}
+                      <Button className="w-full" size="sm" variant="outline">
+                        Assign Provider
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  <svg
+                    className="w-12 h-12 text-gray-400 mx-auto mb-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+                    />
+                  </svg>
+                  <p className="text-gray-500">No service tasks found</p>
+                </div>
+              )}
             </div>
 
             {/* Timeline */}
